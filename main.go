@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
@@ -36,7 +37,6 @@ func main() {
 	apiConfig := apiConfig{
 		DB: dbQueries,
 	}
-
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /v1/err", apiConfig.handlerErr)
@@ -56,6 +56,10 @@ func main() {
 		Addr:    ":" + serverPort,
 		Handler: mux,
 	}
+
+	const feedsCount = 10
+	const scrapeFrequency = 60 * time.Second
+	go startScraping(apiConfig.DB, feedsCount, scrapeFrequency)
 
 	log.Printf("Serving on port: %s\n", serverPort)
 	log.Fatal(server.ListenAndServe())

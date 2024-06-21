@@ -1,11 +1,31 @@
 package main
 
 import (
+	"encoding/xml"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/patrickneise/blog-aggregator/internal/database"
 )
+
+type NullTime struct {
+	Time  time.Time
+	Valid bool // Valid is true if Time is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (nt *NullTime) Scan(value interface{}) error {
+	nt.Time, nt.Valid = value.(time.Time)
+	return nil
+}
+
+// Value implements the driver Valuer interface.
+func (nt NullTime) Value() (*time.Time, error) {
+	if !nt.Valid {
+		return nil, nil
+	}
+	return &nt.Time, nil
+}
 
 type User struct {
 	ID        uuid.UUID `json:"id"`
@@ -26,22 +46,24 @@ func databaseUserToUser(user database.User) User {
 }
 
 type Feed struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Name      string    `json:"name"`
-	URL       string    `json:"url"`
-	UserID    uuid.UUID `json:"user_id"`
+	ID            uuid.UUID `json:"id"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+	Name          string    `json:"name"`
+	URL           string    `json:"url"`
+	UserID        uuid.UUID `json:"user_id"`
+	LastFetchedAt NullTime  `json:"last_fetched_at"`
 }
 
 func databaseFeedToFeed(feed database.Feed) Feed {
 	return Feed{
-		ID:        feed.ID,
-		CreatedAt: feed.CreatedAt,
-		UpdatedAt: feed.UpdatedAt,
-		Name:      feed.Name,
-		URL:       feed.Url,
-		UserID:    feed.UserID,
+		ID:            feed.ID,
+		CreatedAt:     feed.CreatedAt,
+		UpdatedAt:     feed.UpdatedAt,
+		Name:          feed.Name,
+		URL:           feed.Url,
+		UserID:        feed.UserID,
+		LastFetchedAt: NullTime(feed.LastFetchedAt),
 	}
 }
 
@@ -77,4 +99,33 @@ func databaseFollowsToFollows(follows []database.FeedFollow) []FeedFollow {
 		result[i] = databaseFollowToFollow(follow)
 	}
 	return result
+}
+
+type RSSFeed struct {
+	XMLName xml.Name `xml:"rss"`
+	Text    string   `xml:",chardata"`
+	Version string   `xml:"version,attr"`
+	Atom    string   `xml:"atom,attr"`
+	Channel struct {
+		Text  string `xml:",chardata"`
+		Title string `xml:"title"`
+		Link  struct {
+			Text string `xml:",chardata"`
+			Href string `xml:"href,attr"`
+			Rel  string `xml:"rel,attr"`
+			Type string `xml:"type,attr"`
+		} `xml:"link"`
+		Description   string `xml:"description"`
+		Generator     string `xml:"generator"`
+		Language      string `xml:"language"`
+		LastBuildDate string `xml:"lastBuildDate"`
+		Item          []struct {
+			Text        string `xml:",chardata"`
+			Title       string `xml:"title"`
+			Link        string `xml:"link"`
+			PubDate     string `xml:"pubDate"`
+			Guid        string `xml:"guid"`
+			Description string `xml:"description"`
+		} `xml:"item"`
+	} `xml:"channel"`
 }
