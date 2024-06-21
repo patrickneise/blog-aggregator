@@ -52,6 +52,8 @@ func main() {
 	mux.HandleFunc("POST /v1/users", apiConfig.handlerUsersCreate)
 	mux.HandleFunc("GET /v1/users", apiConfig.middlewareAuth(apiConfig.handlerUsersGet))
 
+	mux.Handle("GET /v1/posts", apiConfig.middlewareAuth(apiConfig.handlerPostsGet))
+
 	server := &http.Server{
 		Addr:    ":" + serverPort,
 		Handler: mux,

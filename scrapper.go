@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/xml"
-	"fmt"
 	"log"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/patrickneise/blog-aggregator/internal/database"
 )
 
@@ -48,10 +49,8 @@ func scrapeFeed(db *database.Queries, feed database.Feed, wg *sync.WaitGroup) {
 		return
 	}
 
-	err = processFeedData(feedData)
-	if err != nil {
-		return
-	}
+	processFeedData(db, feed, feedData)
+
 }
 
 func fetchFeed(url string) (*RSSFeed, error) {
@@ -73,9 +72,45 @@ func fetchFeed(url string) (*RSSFeed, error) {
 	return &feedData, nil
 }
 
-func processFeedData(feedData *RSSFeed) error {
+func processFeedData(db *database.Queries, feed database.Feed, feedData *RSSFeed) {
 	for _, item := range feedData.Channel.Item {
-		fmt.Println(item.Title)
+		now := time.Now().UTC()
+
+		// Check if post already exists
+		postDB, _ := db.GetPostByURL(context.Background(), item.Link)
+		if postDB != (database.Post{}) {
+			continue
+		}
+
+		publishedAt, err := time.Parse(time.RFC1123Z, item.PubDate)
+		if err != nil {
+			log.Printf("Unable to parse published_at %s\n", item.PubDate)
+			continue
+		}
+
+		description := sql.NullString{
+			String: item.Description,
+			Valid:  false,
+		}
+		if item.Description != "" {
+			description.Valid = true
+		}
+
+		args := &database.CreatePostParams{
+			ID:          uuid.New(),
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			Title:       item.Title,
+			Url:         item.Link,
+			Description: description,
+			PublishedAt: publishedAt,
+			FeedID:      feed.ID,
+		}
+
+		err = db.CreatePost(context.Background(), *args)
+		if err != nil {
+			log.Println("Failed to create post", err)
+			continue
+		}
 	}
-	return nil
 }
